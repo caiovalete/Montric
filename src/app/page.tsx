@@ -37,12 +37,19 @@ export default function MontricApp() {
   const [caloriesConsumed, setCaloriesConsumed] = useState(1200);
   const [mood, setMood] = useState<number | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [mounted, setMounted] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Inicializar data apenas no cliente para evitar hydration mismatch
+  useEffect(() => {
+    setSelectedDate(new Date());
+    setMounted(true);
+  }, []);
 
   const waterGoal = 2000;
   const proteinGoal = 120;
-  const caloriesGoal = 2000; // Meta de calorias consumidas
+  const caloriesGoal = 2000;
 
   const waterPercentage = (waterProgress / waterGoal) * 100;
   const proteinPercentage = (proteinProgress / proteinGoal) * 100;
@@ -50,6 +57,8 @@ export default function MontricApp() {
 
   // Dados do calendário - slider de datas
   const getDaysArray = () => {
+    if (!selectedDate) return [];
+    
     const days = [];
     const baseDate = new Date(selectedDate);
     
@@ -63,18 +72,18 @@ export default function MontricApp() {
   };
 
   const daysArray = getDaysArray();
-  const today = new Date();
+  const today = selectedDate ? new Date() : null;
 
   // Auto-scroll para o dia selecionado
   useEffect(() => {
-    if (scrollContainerRef.current) {
+    if (scrollContainerRef.current && selectedDate && mounted) {
       const container = scrollContainerRef.current;
       const selectedIndex = daysArray.findIndex(
         date => date.toDateString() === selectedDate.toDateString()
       );
       
       if (selectedIndex !== -1) {
-        const itemWidth = 68; // largura aproximada de cada item (60px + gap)
+        const itemWidth = 68;
         const scrollPosition = (selectedIndex * itemWidth) - (container.clientWidth / 2) + (itemWidth / 2);
         container.scrollTo({
           left: scrollPosition,
@@ -82,31 +91,51 @@ export default function MontricApp() {
         });
       }
     }
-  }, [selectedDate]);
+  }, [selectedDate, mounted]);
 
   // Simular dados de metas cumpridas
-  const dailyGoals: { [key: string]: number } = {
-    [new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000).toDateString()]: 100,
-    [new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toDateString()]: 85,
-    [new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000).toDateString()]: 100,
-    [today.toDateString()]: 75,
+  const getDailyGoals = () => {
+    if (!today) return {};
+    
+    return {
+      [new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000).toDateString()]: 100,
+      [new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toDateString()]: 85,
+      [new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000).toDateString()]: 100,
+      [today.toDateString()]: 75,
+    };
   };
+
+  const dailyGoals = getDailyGoals();
 
   const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", 
                       "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
   const handlePrevWeek = () => {
+    if (!selectedDate) return;
     const newDate = new Date(selectedDate);
     newDate.setDate(selectedDate.getDate() - 7);
     setSelectedDate(newDate);
   };
 
   const handleNextWeek = () => {
+    if (!selectedDate) return;
     const newDate = new Date(selectedDate);
     newDate.setDate(selectedDate.getDate() + 7);
     setSelectedDate(newDate);
   };
+
+  // Renderizar loading state durante hydration
+  if (!mounted || !selectedDate) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#064D58] mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   const renderDashboard = () => (
     <>
@@ -160,9 +189,9 @@ export default function MontricApp() {
           }}
         >
           {daysArray.map((date, index) => {
-            const isToday = date.toDateString() === today.toDateString();
-            const isPast = date < today && !isToday;
-            const isFuture = date > today;
+            const isToday = today && date.toDateString() === today.toDateString();
+            const isPast = today && date < today && !isToday;
+            const isFuture = today && date > today;
             const isSelected = date.toDateString() === selectedDate.toDateString();
             const goalPercentage = dailyGoals[date.toDateString()] || 0;
 
