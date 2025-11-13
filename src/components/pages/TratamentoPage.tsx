@@ -1,241 +1,797 @@
 "use client";
 
-import { useState } from "react";
-import { 
-  Syringe, 
+import { useState, useEffect } from "react";
+import {
+  Syringe,
   Plus,
   Calendar,
   Clock,
-  AlertCircle,
   CheckCircle,
-  ChevronRight,
+  XCircle,
+  AlertCircle,
   Edit,
   Trash2,
-  X,
-  Bell
+  ChevronRight,
+  Pill,
+  Activity,
+  FileText,
 } from "lucide-react";
 
-export default function TratamentoPage() {
-  const [showAddDoseModal, setShowAddDoseModal] = useState(false);
-  const [showMedicationModal, setShowMedicationModal] = useState(false);
+interface Treatment {
+  id: string;
+  medication: string;
+  dosage_mg: number;
+  frequency: string;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  next_application?: string;
+}
 
-  // Dados de exemplo
-  const currentMedication = {
-    name: "Mounjaro",
-    dosage: "5mg",
+interface MedicationLog {
+  id: string;
+  treatment_id: string;
+  scheduled_date: string;
+  applied_date: string | null;
+  applied_time: string | null;
+  status: "pending" | "applied" | "skipped";
+  notes: string | null;
+  medication_name?: string;
+}
+
+const MEDICATIONS = [
+  "Mounjaro (Tirzepatida)",
+  "Ozempic (Semaglutida)",
+  "Saxenda (Liraglutida)",
+  "Wegovy (Semaglutida)"
+];
+
+const DOSAGES: { [key: string]: number[] } = {
+  "Mounjaro (Tirzepatida)": [2.5, 5, 7.5, 10, 12.5, 15],
+  "Ozempic (Semaglutida)": [0.25, 0.5, 1, 2],
+  "Saxenda (Liraglutida)": [0.6, 1.2, 1.8, 2.4, 3],
+  "Wegovy (Semaglutida)": [0.25, 0.5, 1, 1.7, 2.4]
+};
+
+export default function TratamentoPage() {
+  const [showAddTreatment, setShowAddTreatment] = useState(false);
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showLogDetailModal, setShowLogDetailModal] = useState(false);
+  const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
+  const [selectedLog, setSelectedLog] = useState<MedicationLog | null>(null);
+  const [editingTreatment, setEditingTreatment] = useState<Treatment | null>(null);
+  const [treatments, setTreatments] = useState<Treatment[]>([
+    {
+      id: "1",
+      medication: "Mounjaro (Tirzepatida)",
+      dosage_mg: 5,
+      frequency: "Semanal",
+      start_date: "2024-01-01",
+      end_date: null,
+      is_active: true,
+      next_application: "2024-01-20T15:00:00",
+    },
+  ]);
+  const [medicationHistory, setMedicationHistory] = useState<MedicationLog[]>([
+    {
+      id: "1",
+      treatment_id: "1",
+      scheduled_date: "2024-01-13",
+      applied_date: "2024-01-13",
+      applied_time: "15:30",
+      status: "applied",
+      notes: "Aplicação normal, sem efeitos colaterais",
+      medication_name: "Mounjaro (Tirzepatida) 5mg",
+    },
+    {
+      id: "2",
+      treatment_id: "1",
+      scheduled_date: "2024-01-06",
+      applied_date: "2024-01-06",
+      applied_time: "14:45",
+      status: "applied",
+      notes: null,
+      medication_name: "Mounjaro (Tirzepatida) 5mg",
+    },
+  ]);
+
+  const [formData, setFormData] = useState({
+    medication: "",
+    dosage_mg: "",
     frequency: "Semanal",
-    startDate: "01/01/2024",
-    nextDose: "Sábado, 15:00",
-    daysRemaining: 2,
+    start_date: "",
+    end_date: "",
+  });
+
+  const [editFormData, setEditFormData] = useState({
+    medication: "",
+    dosage_mg: "",
+    frequency: "Semanal",
+    start_date: "",
+    end_date: "",
+  });
+
+  const [logData, setLogData] = useState({
+    applied_date: "",
+    applied_time: "",
+    notes: "",
+    status: "applied" as "applied" | "skipped",
+  });
+
+  const handleAddTreatment = () => {
+    if (!formData.medication || !formData.dosage_mg || !formData.start_date) {
+      alert("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    const newTreatment: Treatment = {
+      id: Date.now().toString(),
+      medication: formData.medication,
+      dosage_mg: Number(formData.dosage_mg),
+      frequency: formData.frequency,
+      start_date: formData.start_date,
+      end_date: formData.end_date || null,
+      is_active: true,
+    };
+
+    setTreatments([...treatments, newTreatment]);
+    setFormData({
+      medication: "",
+      dosage_mg: "",
+      frequency: "Semanal",
+      start_date: "",
+      end_date: "",
+    });
+    setShowAddTreatment(false);
   };
 
-  const doseHistory = [
-    { id: 1, date: "22/01/2024", time: "15:00", dosage: "5mg", location: "Abdômen", notes: "Sem efeitos colaterais" },
-    { id: 2, date: "15/01/2024", time: "15:00", dosage: "5mg", location: "Coxa", notes: "Leve náusea" },
-    { id: 3, date: "08/01/2024", time: "15:00", dosage: "2.5mg", location: "Abdômen", notes: "Primeira dose - tudo ok" },
-    { id: 4, date: "01/01/2024", time: "15:00", dosage: "2.5mg", location: "Braço", notes: "Início do tratamento" },
-  ];
+  const handleEditTreatment = (treatment: Treatment) => {
+    setEditingTreatment(treatment);
+    setEditFormData({
+      medication: treatment.medication,
+      dosage_mg: treatment.dosage_mg.toString(),
+      frequency: treatment.frequency,
+      start_date: treatment.start_date,
+      end_date: treatment.end_date || "",
+    });
+    setShowEditModal(true);
+  };
 
-  const medications = [
-    { id: 1, name: "Mounjaro", type: "Tirzepatida", dosages: ["2.5mg", "5mg", "7.5mg", "10mg", "12.5mg", "15mg"] },
-    { id: 2, name: "Ozempic", type: "Semaglutida", dosages: ["0.25mg", "0.5mg", "1mg", "2mg"] },
-    { id: 3, name: "Wegovy", type: "Semaglutida", dosages: ["0.25mg", "0.5mg", "1mg", "1.7mg", "2.4mg"] },
-    { id: 4, name: "Saxenda", type: "Liraglutida", dosages: ["0.6mg", "1.2mg", "1.8mg", "2.4mg", "3mg"] },
-  ];
+  const handleUpdateTreatment = () => {
+    if (!editFormData.medication || !editFormData.dosage_mg || !editFormData.start_date || !editingTreatment) {
+      alert("Preencha todos os campos obrigatórios");
+      return;
+    }
 
-  const injectionSites = ["Abdômen", "Coxa", "Braço", "Glúteo"];
+    const updatedTreatments = treatments.map((t) =>
+      t.id === editingTreatment.id
+        ? {
+            ...t,
+            medication: editFormData.medication,
+            dosage_mg: Number(editFormData.dosage_mg),
+            frequency: editFormData.frequency,
+            start_date: editFormData.start_date,
+            end_date: editFormData.end_date || null,
+          }
+        : t
+    );
+
+    setTreatments(updatedTreatments);
+    setShowEditModal(false);
+    setEditingTreatment(null);
+  };
+
+  const handleDeleteTreatment = (treatmentId: string) => {
+    if (confirm("Tem certeza que deseja excluir este tratamento?")) {
+      setTreatments(treatments.filter((t) => t.id !== treatmentId));
+    }
+  };
+
+  const handleLogMedication = () => {
+    if (!selectedTreatment || !logData.applied_date || !logData.applied_time) {
+      alert("Preencha a data e hora da aplicação");
+      return;
+    }
+
+    const newLog: MedicationLog = {
+      id: Date.now().toString(),
+      treatment_id: selectedTreatment.id,
+      scheduled_date: selectedTreatment.next_application?.split('T')[0] || new Date().toISOString().split('T')[0],
+      applied_date: logData.applied_date,
+      applied_time: logData.applied_time,
+      status: logData.status,
+      notes: logData.notes || null,
+      medication_name: `${selectedTreatment.medication} ${selectedTreatment.dosage_mg}mg`,
+    };
+
+    setMedicationHistory([newLog, ...medicationHistory]);
+    setLogData({ applied_date: "", applied_time: "", notes: "", status: "applied" });
+    setShowLogModal(false);
+    setSelectedTreatment(null);
+  };
+
+  const handleViewLogDetail = (log: MedicationLog) => {
+    setSelectedLog(log);
+    setShowLogDetailModal(true);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const formatDateTime = (dateString: string, timeString?: string | null) => {
+    const date = new Date(dateString);
+    const dateFormatted = date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+    });
+    
+    if (timeString) {
+      return `${dateFormatted} às ${timeString}`;
+    }
+    
+    return date.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getNextApplicationDate = (treatment: Treatment) => {
+    if (treatment.next_application) {
+      const date = new Date(treatment.next_application);
+      const now = new Date();
+      const diffTime = date.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 0) return "Hoje";
+      if (diffDays === 1) return "Amanhã";
+      if (diffDays < 0) return "Atrasado";
+      return `Em ${diffDays} dias`;
+    }
+    return "Não agendado";
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "applied":
+        return "text-green-600 bg-green-100";
+      case "skipped":
+        return "text-red-600 bg-red-100";
+      case "pending":
+        return "text-yellow-600 bg-yellow-100";
+      default:
+        return "text-gray-600 bg-gray-100";
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "applied":
+        return <CheckCircle className="w-4 h-4" />;
+      case "skipped":
+        return <XCircle className="w-4 h-4" />;
+      case "pending":
+        return <AlertCircle className="w-4 h-4" />;
+      default:
+        return null;
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "applied":
+        return "Aplicado";
+      case "skipped":
+        return "Pulado";
+      case "pending":
+        return "Pendente";
+      default:
+        return status;
+    }
+  };
+
+  const availableDosages = formData.medication ? DOSAGES[formData.medication] || [] : [];
+  const availableEditDosages = editFormData.medication ? DOSAGES[editFormData.medication] || [] : [];
 
   return (
     <div className="space-y-6">
-      {/* Medicamento Atual */}
-      <div className="bg-gradient-to-br from-[#064D58] to-[#085563] rounded-xl p-6 text-white shadow-lg">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Syringe className="w-5 h-5 text-[#2DD6C1]" />
-              <span className="text-sm font-medium text-[#2DD6C1]">Medicamento Atual</span>
-            </div>
-            <h2 className="text-3xl font-bold mb-1">{currentMedication.name}</h2>
-            <p className="text-lg text-gray-300">{currentMedication.dosage} - {currentMedication.frequency}</p>
-          </div>
-          <button
-            onClick={() => setShowMedicationModal(true)}
-            className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors"
-          >
-            <Edit className="w-5 h-5" />
-          </button>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-[#064D58]">Tratamento</h2>
+          <p className="text-sm text-gray-600">Gerencie seus medicamentos e aplicações</p>
         </div>
-
-        <div className="grid grid-cols-2 gap-4 mt-6">
-          <div className="bg-white/10 rounded-lg p-4">
-            <p className="text-xs text-gray-300 mb-1">Início do Tratamento</p>
-            <p className="text-lg font-semibold">{currentMedication.startDate}</p>
-          </div>
-          <div className="bg-white/10 rounded-lg p-4">
-            <p className="text-xs text-gray-300 mb-1">Próxima Dose</p>
-            <p className="text-lg font-semibold">{currentMedication.nextDose}</p>
-            <p className="text-xs text-[#2DD6C1] mt-1">Em {currentMedication.daysRemaining} dias</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Ações Rápidas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <button
-          onClick={() => setShowAddDoseModal(true)}
-          className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition-all flex items-center gap-4"
+          onClick={() => setShowAddTreatment(true)}
+          className="bg-[#064D58] text-white px-4 py-2 rounded-lg font-semibold hover:bg-[#085563] transition-all flex items-center gap-2"
         >
-          <div className="bg-[#064D58] p-3 rounded-full">
-            <Plus className="w-6 h-6 text-white" />
-          </div>
-          <div className="text-left">
-            <p className="font-semibold text-[#064D58]">Registrar Dose</p>
-            <p className="text-xs text-gray-500">Aplicou agora? Registre aqui</p>
-          </div>
-        </button>
-
-        <button className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition-all flex items-center gap-4">
-          <div className="bg-[#2DD6C1] p-3 rounded-full">
-            <Bell className="w-6 h-6 text-[#064D58]" />
-          </div>
-          <div className="text-left">
-            <p className="font-semibold text-[#064D58]">Configurar Lembrete</p>
-            <p className="text-xs text-gray-500">Nunca esqueça uma dose</p>
-          </div>
+          <Plus className="w-5 h-5" />
+          <span className="hidden sm:inline">Novo Tratamento</span>
         </button>
       </div>
 
-      {/* Histórico de Doses */}
-      <div className="bg-white rounded-xl p-6 shadow-md">
-        <h3 className="text-lg font-bold text-[#064D58] mb-4">Histórico de Doses</h3>
-
-        <div className="space-y-3">
-          {doseHistory.map((dose) => (
-            <div
-              key={dose.id}
-              className="flex items-start justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+      {/* Próxima Aplicação Destacada */}
+      {treatments.length > 0 && treatments[0].next_application && (
+        <div className="bg-gradient-to-r from-[#064D58] to-[#085563] rounded-2xl p-6 text-white shadow-xl">
+          <div className="flex items-start justify-between flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar className="w-5 h-5 text-[#2DD6C1]" />
+                <span className="text-sm font-medium text-[#2DD6C1]">Próxima Aplicação</span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-bold mb-1">
+                {formatDateTime(treatments[0].next_application)}
+              </h3>
+              <p className="text-sm text-gray-300">
+                {treatments[0].medication} {treatments[0].dosage_mg}mg -{" "}
+                {getNextApplicationDate(treatments[0])}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedTreatment(treatments[0]);
+                setShowLogModal(true);
+              }}
+              className="bg-[#2DD6C1] text-[#064D58] px-6 py-3 rounded-lg font-semibold hover:bg-[#26c4b0] transition-all hover:scale-105 w-full sm:w-auto"
             >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span className="font-semibold text-[#064D58]">{dose.date}</span>
-                  <span className="text-xs text-gray-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {dose.time}
+              Registrar Agora
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tratamentos Ativos */}
+      <div>
+        <h3 className="text-lg font-bold text-[#064D58] mb-4">Tratamentos Ativos</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {treatments.map((treatment) => (
+            <div
+              key={treatment.id}
+              className="bg-white rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow border border-gray-100"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start gap-3">
+                  <div className="bg-[#064D58]/10 p-3 rounded-lg">
+                    <Pill className="w-6 h-6 text-[#064D58]" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">{treatment.medication}</h4>
+                    <p className="text-sm text-gray-600">{treatment.dosage_mg}mg</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => handleEditTreatment(treatment)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Editar tratamento"
+                  >
+                    <Edit className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteTreatment(treatment.id)}
+                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Excluir tratamento"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-600">Frequência: {treatment.frequency}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-600">
+                    Início: {formatDate(treatment.start_date)}
                   </span>
                 </div>
-                <div className="flex gap-4 text-sm text-gray-600 mb-1">
-                  <span>Dose: <span className="font-semibold text-[#064D58]">{dose.dosage}</span></span>
-                  <span>Local: <span className="font-semibold text-[#064D58]">{dose.location}</span></span>
-                </div>
-                {dose.notes && (
-                  <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
-                    <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    {dose.notes}
-                  </p>
+                {treatment.next_application && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Activity className="w-4 h-4 text-[#2DD6C1]" />
+                    <span className="text-[#064D58] font-medium">
+                      Próxima: {getNextApplicationDate(treatment)}
+                    </span>
+                  </div>
                 )}
               </div>
-              <div className="flex gap-2">
-                <button className="text-gray-400 hover:text-[#064D58] p-1">
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button className="text-gray-400 hover:text-red-600 p-1">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+
+              <button
+                onClick={() => {
+                  setSelectedTreatment(treatment);
+                  setShowLogModal(true);
+                }}
+                className="w-full bg-[#064D58] text-white py-2.5 rounded-lg font-semibold hover:bg-[#085563] transition-colors flex items-center justify-center gap-2"
+              >
+                <Syringe className="w-4 h-4" />
+                Registrar Aplicação
+              </button>
             </div>
           ))}
         </div>
+
+        {treatments.length === 0 && (
+          <div className="bg-white rounded-xl p-8 text-center shadow-md">
+            <Pill className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-600 mb-4">Nenhum tratamento cadastrado</p>
+            <button
+              onClick={() => setShowAddTreatment(true)}
+              className="bg-[#064D58] text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-[#085563] transition-colors"
+            >
+              Adicionar Primeiro Tratamento
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Estatísticas do Tratamento */}
-      <div className="bg-white rounded-xl p-6 shadow-md">
-        <h3 className="text-lg font-bold text-[#064D58] mb-4">Estatísticas do Tratamento</h3>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-3xl font-bold text-[#064D58]">29</p>
-            <p className="text-xs text-gray-600 mt-1">Dias de Tratamento</p>
-          </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-3xl font-bold text-[#064D58]">4</p>
-            <p className="text-xs text-gray-600 mt-1">Doses Aplicadas</p>
-          </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-3xl font-bold text-green-600">100%</p>
-            <p className="text-xs text-gray-600 mt-1">Adesão</p>
-          </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-3xl font-bold text-[#064D58]">0</p>
-            <p className="text-xs text-gray-600 mt-1">Doses Perdidas</p>
-          </div>
+      {/* Histórico de Aplicações */}
+      <div>
+        <h3 className="text-lg font-bold text-[#064D58] mb-4">Histórico de Aplicações</h3>
+        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+          {medicationHistory.length > 0 ? (
+            <div className="divide-y divide-gray-100">
+              {medicationHistory.map((log) => (
+                <div
+                  key={log.id}
+                  onClick={() => handleViewLogDetail(log)}
+                  className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-gray-900">
+                          {log.medication_name}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusColor(
+                            log.status
+                          )}`}
+                        >
+                          {getStatusIcon(log.status)}
+                          {getStatusText(log.status)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-1">
+                        {formatDateTime(log.applied_date || log.scheduled_date, log.applied_time)}
+                      </p>
+                      {log.notes && (
+                        <p className="text-sm text-gray-500 italic line-clamp-1">{log.notes}</p>
+                      )}
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-600">Nenhuma aplicação registrada ainda</p>
+            </div>
+          )}
         </div>
       </div>
 
-
-
-      {/* Modal de Registrar Dose */}
-      {showAddDoseModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-[#064D58]">Registrar Dose</h3>
+      {/* Modal: Adicionar Tratamento */}
+      {showAddTreatment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#064D58]">Novo Tratamento</h3>
               <button
-                onClick={() => setShowAddDoseModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                onClick={() => setShowAddTreatment(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X className="w-6 h-6" />
+                <XCircle className="w-5 h-5 text-gray-600" />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Data e Hora</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="date"
-                    defaultValue={new Date().toISOString().split('T')[0]}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
-                  />
-                  <input
-                    type="time"
-                    defaultValue="15:00"
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Dosagem</label>
-                <select 
-                  defaultValue="5mg"
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Medicamento *
+                </label>
+                <select
+                  value={formData.medication}
+                  onChange={(e) => setFormData({ ...formData, medication: e.target.value, dosage_mg: "" })}
                   className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
                 >
-                  <option>2.5mg</option>
-                  <option>5mg</option>
-                  <option>7.5mg</option>
-                  <option>10mg</option>
+                  <option value="">Selecione o medicamento</option>
+                  {MEDICATIONS.map((med) => (
+                    <option key={med} value={med}>{med}</option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Local da Aplicação</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {injectionSites.map((site) => (
-                    <button
-                      key={site}
-                      className="p-3 rounded-lg text-sm font-medium bg-gray-100 hover:bg-[#064D58] hover:text-white transition-all"
-                    >
-                      {site}
-                    </button>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dosagem (mg) *
+                </label>
+                <select
+                  value={formData.dosage_mg}
+                  onChange={(e) => setFormData({ ...formData, dosage_mg: e.target.value })}
+                  disabled={!formData.medication}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">Selecione a dosagem</option>
+                  {availableDosages.map((dosage) => (
+                    <option key={dosage} value={dosage}>{dosage}mg</option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Frequência *
+                </label>
+                <select
+                  value={formData.frequency}
+                  onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                >
+                  <option value="Diário">Diário</option>
+                  <option value="Semanal">Semanal</option>
+                  <option value="Quinzenal">Quinzenal</option>
+                  <option value="Mensal">Mensal</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data de Início *
+                </label>
+                <input
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data de Término (opcional)
+                </label>
+                <input
+                  type="date"
+                  value={formData.end_date}
+                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddTreatment(false)}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddTreatment}
+                className="flex-1 bg-[#064D58] text-white py-3 rounded-lg font-semibold hover:bg-[#085563] transition-colors"
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Editar Tratamento */}
+      {showEditModal && editingTreatment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#064D58]">Editar Tratamento</h3>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingTreatment(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <XCircle className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Medicamento *
+                </label>
+                <select
+                  value={editFormData.medication}
+                  onChange={(e) => setEditFormData({ ...editFormData, medication: e.target.value, dosage_mg: "" })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                >
+                  <option value="">Selecione o medicamento</option>
+                  {MEDICATIONS.map((med) => (
+                    <option key={med} value={med}>{med}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dosagem (mg) *
+                </label>
+                <select
+                  value={editFormData.dosage_mg}
+                  onChange={(e) => setEditFormData({ ...editFormData, dosage_mg: e.target.value })}
+                  disabled={!editFormData.medication}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">Selecione a dosagem</option>
+                  {availableEditDosages.map((dosage) => (
+                    <option key={dosage} value={dosage}>{dosage}mg</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Frequência *
+                </label>
+                <select
+                  value={editFormData.frequency}
+                  onChange={(e) => setEditFormData({ ...editFormData, frequency: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                >
+                  <option value="Diário">Diário</option>
+                  <option value="Semanal">Semanal</option>
+                  <option value="Quinzenal">Quinzenal</option>
+                  <option value="Mensal">Mensal</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data de Início *
+                </label>
+                <input
+                  type="date"
+                  value={editFormData.start_date}
+                  onChange={(e) => setEditFormData({ ...editFormData, start_date: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data de Término (opcional)
+                </label>
+                <input
+                  type="date"
+                  value={editFormData.end_date}
+                  onChange={(e) => setEditFormData({ ...editFormData, end_date: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingTreatment(null);
+                }}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleUpdateTreatment}
+                className="flex-1 bg-[#064D58] text-white py-3 rounded-lg font-semibold hover:bg-[#085563] transition-colors"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Registrar Aplicação */}
+      {showLogModal && selectedTreatment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#064D58]">Registrar Aplicação</h3>
+              <button
+                onClick={() => {
+                  setShowLogModal(false);
+                  setSelectedTreatment(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <XCircle className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-600 mb-1">Medicamento</p>
+              <p className="font-bold text-gray-900">
+                {selectedTreatment.medication}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Dosagem: {selectedTreatment.dosage_mg}mg
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status da Aplicação
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setLogData({ ...logData, status: "applied" })}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      logData.status === "applied"
+                        ? "border-green-500 bg-green-50 text-green-700"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <CheckCircle className="w-5 h-5 mx-auto mb-1" />
+                    <span className="text-sm font-medium">Aplicado</span>
+                  </button>
+                  <button
+                    onClick={() => setLogData({ ...logData, status: "skipped" })}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      logData.status === "skipped"
+                        ? "border-red-500 bg-red-50 text-red-700"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <XCircle className="w-5 h-5 mx-auto mb-1" />
+                    <span className="text-sm font-medium">Pulado</span>
+                  </button>
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Observações</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data da Aplicação *
+                </label>
+                <input
+                  type="date"
+                  value={logData.applied_date}
+                  onChange={(e) => setLogData({ ...logData, applied_date: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hora da Aplicação *
+                </label>
+                <input
+                  type="time"
+                  value={logData.applied_time}
+                  onChange={(e) => setLogData({ ...logData, applied_time: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observações (opcional)
+                </label>
                 <textarea
-                  placeholder="Como se sentiu? Algum efeito colateral?"
+                  value={logData.notes}
+                  onChange={(e) => setLogData({ ...logData, notes: e.target.value })}
+                  placeholder="Efeitos colaterais, local da aplicação, etc..."
                   className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1] resize-none"
                   rows={3}
                 ></textarea>
@@ -244,114 +800,130 @@ export default function TratamentoPage() {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setShowAddDoseModal(false)}
-                className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                onClick={() => {
+                  setShowLogModal(false);
+                  setSelectedTreatment(null);
+                }}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
               >
                 Cancelar
               </button>
               <button
-                onClick={() => setShowAddDoseModal(false)}
+                onClick={handleLogMedication}
                 className="flex-1 bg-[#064D58] text-white py-3 rounded-lg font-semibold hover:bg-[#085563] transition-colors"
               >
-                Registrar
+                Salvar Registro
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de Configurar Medicamento */}
-      {showMedicationModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-[#064D58]">Configurar Medicamento</h3>
+      {/* Modal: Detalhes da Aplicação */}
+      {showLogDetailModal && selectedLog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#064D58]">Resumo da Aplicação</h3>
               <button
-                onClick={() => setShowMedicationModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                onClick={() => {
+                  setShowLogDetailModal(false);
+                  setSelectedLog(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X className="w-6 h-6" />
+                <XCircle className="w-5 h-5 text-gray-600" />
               </button>
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Medicamento</label>
-                <select 
-                  defaultValue="Mounjaro (Tirzepatida)"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
-                >
-                  <option>Mounjaro (Tirzepatida)</option>
-                  <option>Ozempic (Semaglutida)</option>
-                  <option>Wegovy (Semaglutida)</option>
-                  <option>Saxenda (Liraglutida)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Dosagem Atual</label>
-                <select 
-                  defaultValue="5mg"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
-                >
-                  <option>2.5mg</option>
-                  <option>5mg</option>
-                  <option>7.5mg</option>
-                  <option>10mg</option>
-                  <option>12.5mg</option>
-                  <option>15mg</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Frequência</label>
-                <select 
-                  defaultValue="Semanal"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
-                >
-                  <option>Semanal</option>
-                  <option>Diária</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Dia e Horário da Aplicação</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <select 
-                    defaultValue="Sábado"
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
+              {/* Status */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600">Status</span>
+                  <span
+                    className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1.5 ${getStatusColor(
+                      selectedLog.status
+                    )}`}
                   >
-                    <option>Domingo</option>
-                    <option>Segunda</option>
-                    <option>Terça</option>
-                    <option>Quarta</option>
-                    <option>Quinta</option>
-                    <option>Sexta</option>
-                    <option>Sábado</option>
-                  </select>
-                  <input
-                    type="time"
-                    defaultValue="15:00"
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2DD6C1]"
-                  />
+                    {getStatusIcon(selectedLog.status)}
+                    {getStatusText(selectedLog.status)}
+                  </span>
                 </div>
               </div>
+
+              {/* Medicamento */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="bg-[#064D58]/10 p-2.5 rounded-lg">
+                    <Pill className="w-5 h-5 text-[#064D58]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-600 mb-0.5">Medicamento</p>
+                    <p className="font-bold text-gray-900">{selectedLog.medication_name}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Data e Hora */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="bg-[#064D58]/10 p-2.5 rounded-lg">
+                    <Calendar className="w-5 h-5 text-[#064D58]" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-600 mb-0.5">Data da Aplicação</p>
+                    <p className="font-semibold text-gray-900">
+                      {formatDate(selectedLog.applied_date || selectedLog.scheduled_date)}
+                    </p>
+                  </div>
+                </div>
+                
+                {selectedLog.applied_time && (
+                  <div className="flex items-start gap-3 pt-3 border-t border-gray-200">
+                    <div className="bg-[#064D58]/10 p-2.5 rounded-lg">
+                      <Clock className="w-5 h-5 text-[#064D58]" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-600 mb-0.5">Horário</p>
+                      <p className="font-semibold text-gray-900">{selectedLog.applied_time}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Observações */}
+              {selectedLog.notes && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-[#064D58]/10 p-2.5 rounded-lg">
+                      <FileText className="w-5 h-5 text-[#064D58]" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-600 mb-1">Observações</p>
+                      <p className="text-gray-900">{selectedLog.notes}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!selectedLog.notes && (
+                <div className="bg-gray-50 rounded-lg p-4 text-center">
+                  <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Nenhuma observação registrada</p>
+                </div>
+              )}
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowMedicationModal(false)}
-                className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => setShowMedicationModal(false)}
-                className="flex-1 bg-[#064D58] text-white py-3 rounded-lg font-semibold hover:bg-[#085563] transition-colors"
-              >
-                Salvar
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setShowLogDetailModal(false);
+                setSelectedLog(null);
+              }}
+              className="w-full bg-[#064D58] text-white py-3 rounded-lg font-semibold hover:bg-[#085563] transition-colors mt-6"
+            >
+              Fechar
+            </button>
           </div>
         </div>
       )}
