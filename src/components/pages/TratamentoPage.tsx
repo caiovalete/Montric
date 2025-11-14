@@ -183,8 +183,20 @@ export default function TratamentoPage() {
   };
 
   const handleDeleteTreatment = (treatmentId: string) => {
-    if (confirm("Tem certeza que deseja excluir este tratamento?")) {
-      setTreatments(treatments.filter((t) => t.id !== treatmentId));
+    if (window.confirm("Tem certeza que deseja excluir este tratamento? Esta ação não pode ser desfeita.")) {
+      // Remove o tratamento
+      const updatedTreatments = treatments.filter((t) => t.id !== treatmentId);
+      setTreatments(updatedTreatments);
+      
+      // Remove também os logs relacionados a este tratamento
+      const updatedHistory = medicationHistory.filter((log) => log.treatment_id !== treatmentId);
+      setMedicationHistory(updatedHistory);
+      
+      // Se o tratamento excluído estava selecionado, limpa a seleção
+      if (selectedTreatment?.id === treatmentId) {
+        setSelectedTreatment(null);
+        setShowLogModal(false);
+      }
     }
   };
 
@@ -301,6 +313,9 @@ export default function TratamentoPage() {
   const availableDosages = formData.medication ? DOSAGES[formData.medication] || [] : [];
   const availableEditDosages = editFormData.medication ? DOSAGES[editFormData.medication] || [] : [];
 
+  // Filtra apenas tratamentos ativos
+  const activeTreatments = treatments.filter(t => t.is_active);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -319,7 +334,7 @@ export default function TratamentoPage() {
       </div>
 
       {/* Próxima Aplicação Destacada */}
-      {treatments.length > 0 && treatments[0].next_application && (
+      {activeTreatments.length > 0 && activeTreatments[0].next_application && (
         <div className="bg-gradient-to-r from-[#064D58] to-[#085563] rounded-2xl p-6 text-white shadow-xl">
           <div className="flex items-start justify-between flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -328,16 +343,16 @@ export default function TratamentoPage() {
                 <span className="text-sm font-medium text-[#2DD6C1]">Próxima Aplicação</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-bold mb-1">
-                {formatDateTime(treatments[0].next_application)}
+                {formatDateTime(activeTreatments[0].next_application)}
               </h3>
               <p className="text-sm text-gray-300">
-                {treatments[0].medication} {treatments[0].dosage_mg}mg -{" "}
-                {getNextApplicationDate(treatments[0])}
+                {activeTreatments[0].medication} {activeTreatments[0].dosage_mg}mg -{" "}
+                {getNextApplicationDate(activeTreatments[0])}
               </p>
             </div>
             <button
               onClick={() => {
-                setSelectedTreatment(treatments[0]);
+                setSelectedTreatment(activeTreatments[0]);
                 setShowLogModal(true);
               }}
               className="bg-[#2DD6C1] text-[#064D58] px-6 py-3 rounded-lg font-semibold hover:bg-[#26c4b0] transition-all hover:scale-105 w-full sm:w-auto"
@@ -352,7 +367,7 @@ export default function TratamentoPage() {
       <div>
         <h3 className="text-lg font-bold text-[#064D58] mb-4">Tratamentos Ativos</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {treatments.map((treatment) => (
+          {activeTreatments.map((treatment) => (
             <div
               key={treatment.id}
               className="bg-white rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow border border-gray-100"
@@ -376,7 +391,10 @@ export default function TratamentoPage() {
                     <Edit className="w-4 h-4 text-gray-600" />
                   </button>
                   <button 
-                    onClick={() => handleDeleteTreatment(treatment.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTreatment(treatment.id);
+                    }}
                     className="p-2 hover:bg-red-50 rounded-lg transition-colors"
                     title="Excluir tratamento"
                   >
@@ -420,10 +438,10 @@ export default function TratamentoPage() {
           ))}
         </div>
 
-        {treatments.length === 0 && (
+        {activeTreatments.length === 0 && (
           <div className="bg-white rounded-xl p-8 text-center shadow-md">
             <Pill className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-600 mb-4">Nenhum tratamento cadastrado</p>
+            <p className="text-gray-600 mb-4">Nenhum tratamento ativo</p>
             <button
               onClick={() => setShowAddTreatment(true)}
               className="bg-[#064D58] text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-[#085563] transition-colors"
